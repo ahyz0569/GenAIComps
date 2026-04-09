@@ -91,13 +91,16 @@ class OpeaSeahorseRetriever(OpeaComponent):
         )
 
     async def _search_external(self, input: EmbedDoc) -> list:
-        """external mode: use pre-computed OPEA TEI embedding vector for search."""
+        """external mode: use pre-computed OPEA TEI embedding vector for search.
+
+        Note: similarity_search_by_vector() does not accept retrieval_mode parameter.
+        Vector search is always dense-only (the vector is pre-computed externally).
+        """
         if input.search_type == "similarity_score_threshold":
             docs_and_scores = await asyncio.to_thread(
                 self.vectorstore.similarity_search_by_vector_with_score,
                 embedding=input.embedding,
                 k=input.k,
-                retrieval_mode=self.search_mode,
             )
             return [doc for doc, score in docs_and_scores if score >= input.score_threshold]
 
@@ -105,7 +108,6 @@ class OpeaSeahorseRetriever(OpeaComponent):
             self.vectorstore.similarity_search_by_vector,
             embedding=input.embedding,
             k=input.k,
-            retrieval_mode=self.search_mode,
         )
 
     async def invoke(self, input: EmbedDoc) -> list:
