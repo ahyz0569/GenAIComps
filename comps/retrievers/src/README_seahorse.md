@@ -29,6 +29,10 @@ export SEAHORSE_SEARCH_MODE="hybrid"      # "dense", "sparse", or "hybrid"
 > **⚠️ Important**: `SEAHORSE_EMBEDDING_MODE` must be the same value for both Retriever and Dataprep services.
 > If Dataprep used `builtin` mode to ingest documents, Retriever must also use `builtin`.
 
+> **⚠️ SEAHORSE_SEARCH_MODE**: This must match the vector column configuration of your Seahorse table.
+> For example, if your table only has a dense vector column, set `SEAHORSE_SEARCH_MODE="dense"`.
+> Setting `hybrid` or `sparse` on a table without a sparse vector column will cause search failures.
+
 ### 1.3 Start Retriever Service
 
 ```bash
