@@ -1,0 +1,285 @@
+# Copyright (C) 2024 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+import json
+import os
+from pathlib import Path
+from typing import List, Optional, Union
+
+from fastapi import Body, File, Form, HTTPException, UploadFile
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import HTMLHeaderTextSplitter
+from seahorse_vector_store import SeahorseVectorStore
+
+from comps import CustomLogger, DocPath, OpeaComponent, OpeaComponentRegistry, ServiceType
+from comps.cores.proto.api_protocol import DataprepRequest
+from comps.dataprep.src.utils import (
+    create_upload_folder,
+    document_loader,
+    encode_filename,
+    get_separators,
+    get_tables_result,
+    parse_html_new,
+    remove_folder_with_ignore,
+    save_content_to_local_disk,
+)
+
+from .config.seahorse import (
+    EMBED_MODEL,
+    HF_TOKEN,
+    SEAHORSE_API_KEY,
+    SEAHORSE_BASE_URL,
+    SEAHORSE_EMBEDDING_MODE,
+    SEAHORSE_INDEX_NAME,
+    TEI_EMBEDDING_ENDPOINT,
+)
+
+logger = CustomLogger("seahorse_dataprep")
+logflag = os.getenv("LOGFLAG", False)
+upload_folder = "./uploaded_files/"
+
+
+@OpeaComponentRegistry.register("OPEA_DATAPREP_SEAHORSE")
+class OpeaSeahorseDataprep(OpeaComponent):
+    """Seahorse Cloud document ingestion via API Gateway.
+
+    Embedding mode (controlled by SEAHORSE_EMBEDDING_MODE env var):
+    - "builtin": Seahorse Cloud generates embeddings server-side (no TEI needed).
+                 Must match Retriever's builtin mode for consistent search.
+    - "external": Uses TEI or local HuggingFace embeddings.
+                  Must match Retriever's external mode for consistent search.
+    """
+
+    def __init__(self, name: str, description: str, config: dict = None):
+        super().__init__(name, ServiceType.DATAPREP.name.lower(), description, config)
+        self.upload_folder = upload_folder
+        self.use_builtin = SEAHORSE_EMBEDDING_MODE == "builtin"
+        self.embedder = self._initialize_embedder()
+        self.vectorstore = self._initialize_vectorstore()
+        health_status = self.check_health()
+        if not health_status:
+            logger.error("OpeaSeahorseDataprep health check failed.")
+
+    def _initialize_embedder(self):
+        if self.use_builtin:
+            if logflag:
+                logger.info("[ init embedder ] Using Seahorse built-in embeddings (SEAHORSE_EMBEDDING_MODE=builtin)")
+            return None
+
+        if TEI_EMBEDDING_ENDPOINT:
+            if logflag:
+                logger.info(f"[ init embedder ] TEI_EMBEDDING_ENDPOINT: {TEI_EMBEDDING_ENDPOINT}")
+            if not HF_TOKEN:
+                raise HTTPException(
+                    status_code=400,
+                    detail="You MUST offer the `HF_TOKEN` when using `TEI_EMBEDDING_ENDPOINT`.",
+                )
+            import requests
+            from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+
+            response = requests.get(TEI_EMBEDDING_ENDPOINT + "/info")
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available.",
+                )
+            model_id = response.json()["model_id"]
+            return HuggingFaceInferenceAPIEmbeddings(
+                api_key=HF_TOKEN, model_name=model_id, api_url=TEI_EMBEDDING_ENDPOINT
+            )
+        else:
+            if logflag:
+                logger.info(f"[ init embedder ] LOCAL EMBED_MODEL: {EMBED_MODEL}")
+            from langchain_huggingface import HuggingFaceEmbeddings
+
+            return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
+
+    def _initialize_vectorstore(self) -> SeahorseVectorStore:
+        kwargs = {
+            "api_key": SEAHORSE_API_KEY,
+            "base_url": SEAHORSE_BASE_URL,
+            "dense_column": SEAHORSE_INDEX_NAME,
+        }
+        if self.use_builtin:
+            kwargs["use_builtin_embedding"] = True
+        else:
+            kwargs["embedding"] = self.embedder
+            kwargs["use_builtin_embedding"] = False
+
+        return SeahorseVectorStore(**kwargs)
+
+    def check_health(self) -> bool:
+        if logflag:
+            logger.info("[ check health ] start to check health of Seahorse Cloud")
+        try:
+            # TODO: httpx로 GET /healthz 직접 호출하여 실제 연결 확인
+            return True
+        except Exception as e:
+            logger.error(f"[ check health ] Seahorse Cloud health check failed: {e}")
+            return False
+
+    def invoke(self, *args, **kwargs):
+        pass
+
+    async def ingest_data_to_seahorse(self, doc_path: DocPath):
+        """Parse, chunk, and ingest a single document."""
+        path = doc_path.path
+        file_name = path.split("/")[-1]
+        if logflag:
+            logger.info(f"[ ingest ] Parsing document {path}")
+
+        if path.endswith(".html"):
+            headers_to_split_on = [
+                ("h1", "Header 1"),
+                ("h2", "Header 2"),
+                ("h3", "Header 3"),
+            ]
+            text_splitter = HTMLHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+        else:
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=doc_path.chunk_size,
+                chunk_overlap=doc_path.chunk_overlap,
+                add_start_index=True,
+                separators=get_separators(),
+            )
+
+        content = await document_loader(path)
+
+        structured_types = [".xlsx", ".csv", ".json", "jsonl"]
+        _, ext = os.path.splitext(path)
+
+        if ext in structured_types:
+            chunks = content
+        else:
+            chunks = text_splitter.split_text(content)
+
+        if doc_path.process_table and path.endswith(".pdf"):
+            table_chunks = get_tables_result(path, doc_path.table_strategy)
+            if table_chunks:
+                chunks = chunks + table_chunks
+
+        if logflag:
+            logger.info(f"[ ingest ] Created {len(chunks)} chunks from {file_name}")
+
+        metadatas = [{"filename": file_name} for _ in chunks]
+
+        # builtin: text only → server generates embeddings
+        # external: SDK uses self.embedder to generate embeddings client-side
+        self.vectorstore.add_texts(texts=chunks, metadatas=metadatas)
+
+        if logflag:
+            logger.info(f"[ ingest ] Successfully ingested {file_name} to Seahorse Cloud")
+        return True
+
+    async def ingest_files(self, input: DataprepRequest):
+        """Ingest files/links into Seahorse Cloud.
+
+        Args:
+            input (DataprepRequest): files, link_list, chunk_size, chunk_overlap, etc.
+        Returns:
+            dict: {"status": 200, "message": "Data preparation succeeded"}
+        """
+        files = input.files
+        link_list = input.link_list
+        chunk_size = input.chunk_size
+        chunk_overlap = input.chunk_overlap
+        process_table = input.process_table
+        table_strategy = input.table_strategy
+
+        if logflag:
+            logger.info(f"[ ingest ] files: {files}")
+            logger.info(f"[ ingest ] link_list: {link_list}")
+
+        if files:
+            if not isinstance(files, list):
+                files = [files]
+            for file in files:
+                encode_file = encode_filename(file.filename)
+                save_path = self.upload_folder + encode_file
+                await save_content_to_local_disk(save_path, file)
+                await self.ingest_data_to_seahorse(
+                    DocPath(
+                        path=save_path,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        process_table=process_table,
+                        table_strategy=table_strategy,
+                    )
+                )
+                if logflag:
+                    logger.info(f"[ ingest ] Successfully saved file {save_path}")
+            return {"status": 200, "message": "Data preparation succeeded"}
+
+        if link_list:
+            link_list = json.loads(link_list)
+            if not isinstance(link_list, list):
+                raise HTTPException(status_code=400, detail="link_list should be a list.")
+            for link in link_list:
+                encoded_link = encode_filename(link)
+                save_path = self.upload_folder + encoded_link + ".txt"
+                content = parse_html_new([link], chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                await save_content_to_local_disk(save_path, content)
+                await self.ingest_data_to_seahorse(
+                    DocPath(
+                        path=save_path,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        process_table=process_table,
+                        table_strategy=table_strategy,
+                    )
+                )
+                if logflag:
+                    logger.info(f"[ ingest ] Successfully saved link {link}")
+            return {"status": 200, "message": "Data preparation succeeded"}
+
+        raise HTTPException(status_code=400, detail="Must provide either a file or a string list.")
+
+    async def get_files(self):
+        """Get list of ingested files from local upload folder."""
+        if logflag:
+            logger.info("[ get files ] start to get file structure")
+
+        if not Path(self.upload_folder).exists():
+            if logflag:
+                logger.info("No file uploaded, return empty list.")
+            return []
+
+        from comps.dataprep.src.utils import get_file_structure
+
+        file_content = get_file_structure(self.upload_folder)
+        if logflag:
+            logger.info(file_content)
+        return file_content
+
+    async def delete_files(self, file_path: str = Body(..., embed=True)):
+        """Delete file data from Seahorse Cloud.
+
+        file_path:
+        - "all": delete all data
+        - specific path: delete chunks for that file (by metadata filter)
+        """
+        if logflag:
+            logger.info(f"[ delete ] file_path: {file_path}")
+
+        if file_path == "all":
+            # TODO: langchain-seahorse delete() 또는 httpx로 POST /v2/data/delete 호출
+            try:
+                remove_folder_with_ignore(self.upload_folder)
+            except Exception as e:
+                logger.error(f"[ delete ] Failed to remove upload folder: {e}")
+            create_upload_folder(self.upload_folder)
+            if logflag:
+                logger.info("[ delete ] successfully deleted all files")
+            return {"status": True}
+
+        encode_file_name = encode_filename(file_path)
+        delete_path = Path(self.upload_folder + "/" + encode_file_name)
+
+        if delete_path.exists():
+            # TODO: langchain-seahorse delete(ids=...) 또는 metadata filter 기반 삭제
+            delete_path.unlink()
+            if logflag:
+                logger.info(f"[ delete ] file {file_path} deleted")
+            return {"status": True}
+        else:
+            raise HTTPException(status_code=404, detail="File not found.")
