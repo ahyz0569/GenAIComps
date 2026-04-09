@@ -73,6 +73,7 @@ tiktoken
 tqdm
 typing
 tzlocal
+langchain-seahorse>=0.2.0
 unstructured[all-docs]
 urllib3>=2.6.0
 uvicorn
