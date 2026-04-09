@@ -1,5 +1,13 @@
 # Retriever Microservice with Seahorse Cloud
 
+## 0. Prerequisites
+
+Before using this microservice, you need a Seahorse Cloud table with an API endpoint:
+
+1. Sign up at [Seahorse Console](https://console.seahorse.dnotitia.ai)
+2. Create a table — an API endpoint (`SEAHORSE_BASE_URL`) and API key (`SEAHORSE_API_KEY`) will be issued upon creation
+3. Use the issued endpoint and key as environment variables below
+
 ## 1. 🚀Start Microservice with Python (Option 1)
 
 ### 1.1 Install Requirements
