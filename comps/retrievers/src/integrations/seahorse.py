@@ -4,16 +4,23 @@
 import asyncio
 import os
 
+import requests
+from fastapi import HTTPException
+from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from seahorse_vector_store import SeahorseVectorStore, SearchMode
 
 from comps import CustomLogger, EmbedDoc, OpeaComponent, OpeaComponentRegistry, ServiceType
 
 from .config import (
+    EMBED_MODEL,
+    HF_TOKEN,
     SEAHORSE_API_KEY,
     SEAHORSE_BASE_URL,
     SEAHORSE_EMBEDDING_MODE,
     SEAHORSE_INDEX_NAME,
     SEAHORSE_SEARCH_MODE,
+    TEI_EMBEDDING_ENDPOINT,
 )
 
 logger = CustomLogger("seahorse_retrievers")
@@ -36,29 +43,77 @@ class OpeaSeahorseRetriever(OpeaComponent):
     Embedding mode (controlled by SEAHORSE_EMBEDDING_MODE env var):
     - "builtin": Uses Seahorse server-side embeddings for both indexing and search.
                  Calls similarity_search(query=text) so the server embeds the query.
-    - "external": Uses OPEA TEI embeddings. Calls similarity_search_by_vector(embedding=vec)
-                  with the pre-computed embedding from OPEA's embedding service.
+    - "external": Initializes the SDK with a TEI or local HuggingFace embedder, but query-time
+                  retrieval uses similarity_search_by_vector(embedding=vec) with the pre-computed
+                  embedding passed in from the caller. External mode is always dense-only.
     """
 
     def __init__(self, name: str, description: str, config: dict = None):
         super().__init__(name, ServiceType.RETRIEVER.name.lower(), description, config)
         self.use_builtin = SEAHORSE_EMBEDDING_MODE == "builtin"
-        self.search_mode = SEARCH_MODE_MAP.get(SEAHORSE_SEARCH_MODE, SearchMode.HYBRID)
+        self.embedder = self._initialize_embedder()
+        self.search_mode = self._initialize_search_mode()
         self.vectorstore = self._initialize_vectorstore()
         health_status = self.check_health()
         if not health_status:
             logger.error("OpeaSeahorseRetriever health check failed.")
 
+    def _initialize_embedder(self):
+        if self.use_builtin:
+            if logflag:
+                logger.info("[ init embedder ] Using Seahorse built-in embeddings (SEAHORSE_EMBEDDING_MODE=builtin)")
+            return None
+
+        if TEI_EMBEDDING_ENDPOINT:
+            if logflag:
+                logger.info(f"[ init embedder ] TEI_EMBEDDING_ENDPOINT: {TEI_EMBEDDING_ENDPOINT}")
+            if not HF_TOKEN:
+                raise HTTPException(
+                    status_code=400,
+                    detail="You MUST offer the `HF_TOKEN` when using `TEI_EMBEDDING_ENDPOINT`.",
+                )
+
+            response = requests.get(TEI_EMBEDDING_ENDPOINT + "/info")
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available.",
+                )
+            model_id = response.json()["model_id"]
+            return HuggingFaceInferenceAPIEmbeddings(
+                api_key=HF_TOKEN, model_name=model_id, api_url=TEI_EMBEDDING_ENDPOINT
+            )
+
+        if logflag:
+            logger.info(f"[ init embedder ] LOCAL EMBED_MODEL: {EMBED_MODEL}")
+
+        return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
+
+    def _initialize_search_mode(self) -> SearchMode:
+        requested_mode = SEARCH_MODE_MAP.get(SEAHORSE_SEARCH_MODE, SearchMode.HYBRID)
+        if not self.use_builtin and requested_mode != SearchMode.DENSE:
+            logger.warning(
+                "[ init ] external embedding mode only supports dense search. "
+                f"Overriding SEAHORSE_SEARCH_MODE={SEAHORSE_SEARCH_MODE} to dense."
+            )
+            return SearchMode.DENSE
+        return requested_mode
+
     def _initialize_vectorstore(self) -> SeahorseVectorStore:
         if logflag:
             logger.info(f"[ init ] SEAHORSE_BASE_URL: {SEAHORSE_BASE_URL}")
             logger.info(f"[ init ] SEAHORSE_EMBEDDING_MODE: {SEAHORSE_EMBEDDING_MODE}")
-        return SeahorseVectorStore(
-            api_key=SEAHORSE_API_KEY,
-            base_url=SEAHORSE_BASE_URL,
-            dense_column=SEAHORSE_INDEX_NAME,
-            use_builtin_embedding=self.use_builtin,
-        )
+        kwargs = {
+            "api_key": SEAHORSE_API_KEY,
+            "base_url": SEAHORSE_BASE_URL,
+            "dense_column": SEAHORSE_INDEX_NAME,
+        }
+        if self.use_builtin:
+            kwargs["use_builtin_embedding"] = True
+        else:
+            kwargs["embedding"] = self.embedder
+            kwargs["use_builtin_embedding"] = False
+        return SeahorseVectorStore(**kwargs)
 
     def check_health(self) -> bool:
         """Check Seahorse Cloud connectivity via indexed-row-count API."""
@@ -98,7 +153,7 @@ class OpeaSeahorseRetriever(OpeaComponent):
         """external mode: use pre-computed OPEA TEI embedding vector for search.
 
         Note: similarity_search_by_vector() does not accept retrieval_mode parameter.
-        Vector search is always dense-only (the vector is pre-computed externally).
+        External embedding mode is always dense-only, regardless of SEAHORSE_SEARCH_MODE.
         """
         if input.search_type == "similarity_score_threshold":
             docs_and_scores = await asyncio.to_thread(

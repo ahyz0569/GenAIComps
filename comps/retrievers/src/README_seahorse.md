@@ -28,10 +28,22 @@ export SEAHORSE_SEARCH_MODE="hybrid"      # "dense", "sparse", or "hybrid"
 
 > **⚠️ Important**: `SEAHORSE_EMBEDDING_MODE` must be the same value for both Retriever and Dataprep services.
 > If Dataprep used `builtin` mode to ingest documents, Retriever must also use `builtin`.
+> If Dataprep used `external` mode to ingest documents, Retriever must also use `external`.
 
 > **⚠️ SEAHORSE_SEARCH_MODE**: This must match the vector column configuration of your Seahorse table.
 > For example, if your table only has a dense vector column, set `SEAHORSE_SEARCH_MODE="dense"`.
 > Setting `hybrid` or `sparse` on a table without a sparse vector column will cause search failures.
+> When `SEAHORSE_EMBEDDING_MODE="external"`, Retriever search is always dense-only.
+> Set `SEAHORSE_SEARCH_MODE="dense"`; `hybrid` and `sparse` will be overridden to `dense`.
+
+For `external` mode, you can also set:
+
+```bash
+export TEI_EMBEDDING_ENDPOINT="http://${your_ip}:6060"
+export HF_TOKEN=${your_huggingface_token}
+```
+
+If `TEI_EMBEDDING_ENDPOINT` is not set, Retriever falls back to local HuggingFace embeddings to satisfy the SDK's external-mode initialization requirement.
 
 ### 1.3 Start Retriever Service
 
@@ -47,7 +59,10 @@ python opea_retrievers_microservice.py
 ```bash
 export SEAHORSE_BASE_URL="https://<table-uuid>.api.seahorse.dnotitia.ai"
 export SEAHORSE_API_KEY="sk_xxx"
-export SEAHORSE_EMBEDDING_MODE="builtin"
+export SEAHORSE_EMBEDDING_MODE="builtin"  # set "external" for dense-only vector search
+export SEAHORSE_SEARCH_MODE="hybrid"      # set "dense" when SEAHORSE_EMBEDDING_MODE="external"
+export TEI_EMBEDDING_ENDPOINT="http://${your_ip}:6060"
+export HF_TOKEN=${your_huggingface_token}
 export RETRIEVER_COMPONENT_NAME="OPEA_RETRIEVER_SEAHORSE"
 ```
 
@@ -61,7 +76,7 @@ docker build -t opea/retriever:latest --build-arg https_proxy=$https_proxy --bui
 ### 2.3 Run Docker with CLI
 
 ```bash
-docker run -d --name="retriever-seahorse-server" -p 7000:7000 --ipc=host -e SEAHORSE_BASE_URL=$SEAHORSE_BASE_URL -e SEAHORSE_API_KEY=$SEAHORSE_API_KEY -e SEAHORSE_EMBEDDING_MODE=$SEAHORSE_EMBEDDING_MODE -e RETRIEVER_COMPONENT_NAME=$RETRIEVER_COMPONENT_NAME opea/retriever:latest
+docker run -d --name="retriever-seahorse-server" -p 7000:7000 --ipc=host -e SEAHORSE_BASE_URL=$SEAHORSE_BASE_URL -e SEAHORSE_API_KEY=$SEAHORSE_API_KEY -e SEAHORSE_EMBEDDING_MODE=$SEAHORSE_EMBEDDING_MODE -e SEAHORSE_SEARCH_MODE=$SEAHORSE_SEARCH_MODE -e TEI_EMBEDDING_ENDPOINT=$TEI_EMBEDDING_ENDPOINT -e HF_TOKEN=$HF_TOKEN -e RETRIEVER_COMPONENT_NAME=$RETRIEVER_COMPONENT_NAME opea/retriever:latest
 ```
 
 ## 🚀 3. Consume Retriever Service
@@ -85,7 +100,7 @@ curl http://${your_ip}:7000/v1/retrieval \
   -H 'Content-Type: application/json'
 ```
 
-**external mode** (pre-computed embedding vector):
+**external mode** (pre-computed embedding vector, dense-only):
 
 ```bash
 export your_embedding=$(python -c "import random; embedding = [random.uniform(-1, 1) for _ in range(768)]; print(embedding)")
@@ -100,6 +115,6 @@ curl http://${your_ip}:7000/v1/retrieval \
 | Mode | Env Var | Search Method | TEI Required? |
 |---|---|---|---|
 | `builtin` | `SEAHORSE_EMBEDDING_MODE=builtin` | `similarity_search(query=text)` — server embeds query | No |
-| `external` | `SEAHORSE_EMBEDDING_MODE=external` | `similarity_search_by_vector(embedding=vec)` — uses OPEA TEI vector | Yes |
+| `external` | `SEAHORSE_EMBEDDING_MODE=external` | `similarity_search_by_vector(embedding=vec)` — dense-only query vector search | No (falls back to local HuggingFace) |
 
 > Seahorse Cloud does not support MMR search. MMR requests fall back to similarity search.

@@ -527,6 +527,8 @@ services:
       SEAHORSE_BASE_URL: ${SEAHORSE_BASE_URL}
       SEAHORSE_API_KEY: ${SEAHORSE_API_KEY}
       SEAHORSE_EMBEDDING_MODE: ${SEAHORSE_EMBEDDING_MODE:-builtin}
+      TEI_EMBEDDING_ENDPOINT: ${TEI_EMBEDDING_ENDPOINT}
+      HF_TOKEN: ${HF_TOKEN}
       SEAHORSE_INDEX_NAME: ${SEAHORSE_INDEX_NAME:-embedding}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5000/v1/health_check || exit 1"]

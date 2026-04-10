@@ -25,6 +25,7 @@ export DATAPREP_COMPONENT_NAME="OPEA_DATAPREP_SEAHORSE"
 ```
 
 > **⚠️ Important**: `SEAHORSE_EMBEDDING_MODE` must be the same value for both Retriever and Dataprep services.
+> If Dataprep uses `SEAHORSE_EMBEDDING_MODE="external"`, Retriever must also use `SEAHORSE_EMBEDDING_MODE="external"` and `SEAHORSE_SEARCH_MODE="dense"`.
 
 For `external` mode, also set:
 
@@ -32,6 +33,8 @@ For `external` mode, also set:
 export TEI_EMBEDDING_ENDPOINT="http://${your_ip}:6060"
 export HF_TOKEN=${your_huggingface_token}
 ```
+
+If `TEI_EMBEDDING_ENDPOINT` is not set, Dataprep falls back to local HuggingFace embeddings.
 
 ### Build Docker Image
 
@@ -43,7 +46,7 @@ docker build -t opea/dataprep:latest --build-arg https_proxy=$https_proxy --buil
 ### Run Docker with CLI
 
 ```bash
-docker run -d --name="dataprep-seahorse-server" -p 5000:5000 --ipc=host -e SEAHORSE_BASE_URL=$SEAHORSE_BASE_URL -e SEAHORSE_API_KEY=$SEAHORSE_API_KEY -e SEAHORSE_EMBEDDING_MODE=$SEAHORSE_EMBEDDING_MODE -e DATAPREP_COMPONENT_NAME=$DATAPREP_COMPONENT_NAME opea/dataprep:latest
+docker run -d --name="dataprep-seahorse-server" -p 5000:5000 --ipc=host -e SEAHORSE_BASE_URL=$SEAHORSE_BASE_URL -e SEAHORSE_API_KEY=$SEAHORSE_API_KEY -e SEAHORSE_EMBEDDING_MODE=$SEAHORSE_EMBEDDING_MODE -e TEI_EMBEDDING_ENDPOINT=$TEI_EMBEDDING_ENDPOINT -e HF_TOKEN=$HF_TOKEN -e DATAPREP_COMPONENT_NAME=$DATAPREP_COMPONENT_NAME opea/dataprep:latest
 ```
 
 ## Invoke Microservice
@@ -88,6 +91,6 @@ curl -X POST \
 | Mode | Env Var | Behavior | TEI Required? |
 |---|---|---|---|
 | `builtin` | `SEAHORSE_EMBEDDING_MODE=builtin` | Seahorse server generates embeddings server-side | No |
-| `external` | `SEAHORSE_EMBEDDING_MODE=external` | TEI or local HuggingFace model generates embeddings | Yes |
+| `external` | `SEAHORSE_EMBEDDING_MODE=external` | TEI or local HuggingFace model generates embeddings | No (falls back to local HuggingFace) |
 
 > Once documents are ingested with a specific mode, do **not** switch modes without deleting all existing data first.
