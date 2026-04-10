@@ -109,10 +109,16 @@ class OpeaSeahorseDataprep(OpeaComponent):
         return SeahorseVectorStore(**kwargs)
 
     def check_health(self) -> bool:
+        """Check Seahorse Cloud connectivity via indexed-row-count API."""
         if logflag:
             logger.info("[ check health ] start to check health of Seahorse Cloud")
         try:
-            # TODO: httpx로 GET /healthz 직접 호출하여 실제 연결 확인
+            result = self.vectorstore._client.get_indexed_row_count()
+            if logflag:
+                logger.info(
+                    f"[ check health ] Seahorse Cloud connected. "
+                    f"total_row_count={result.get('total_row_count', 'N/A')}"
+                )
             return True
         except Exception as e:
             logger.error(f"[ check health ] Seahorse Cloud health check failed: {e}")
@@ -262,7 +268,7 @@ class OpeaSeahorseDataprep(OpeaComponent):
             logger.info(f"[ delete ] file_path: {file_path}")
 
         if file_path == "all":
-            # TODO: langchain-seahorse delete() 또는 httpx로 POST /v2/data/delete 호출
+            # TODO: langchain-seahorse delete() 또는 POST /v2/data/delete API 호출
             try:
                 remove_folder_with_ignore(self.upload_folder)
             except Exception as e:
