@@ -25,6 +25,7 @@ langchain-mariadb
 langchain-openai
 langchain-pinecone
 langchain-redis
+langchain-seahorse>=0.2.0
 langchain-text-splitters
 langchain-vdms>=0.1.4
 langchain_huggingface
@@ -73,7 +74,6 @@ tiktoken
 tqdm
 typing
 tzlocal
-langchain-seahorse>=0.2.0
 unstructured[all-docs]
 urllib3>=2.6.0
 uvicorn

@@ -13,7 +13,7 @@ Before using this microservice, you need a Seahorse Cloud table with an API endp
 1. [Start Microservice with Docker](#start-microservice-with-docker)
 2. [Invoke Microservice](#invoke-microservice)
 
-## 🚀Start Microservice with Docker
+## 🚀 Start Microservice with Docker
 
 ### Setup Environment Variables
 

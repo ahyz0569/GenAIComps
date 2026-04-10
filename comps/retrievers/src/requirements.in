@@ -18,6 +18,7 @@ langchain-mariadb
 langchain-openai
 langchain-pinecone
 langchain-opengauss
+langchain-seahorse>=0.2.0
 langchain-vdms>=0.1.4
 langchain_community
 langchain_huggingface
@@ -53,7 +54,6 @@ qdrant-haystack
 redis
 sentence_transformers
 shortuuid
-langchain-seahorse>=0.2.0
 starlette>=0.49.1
 tiktoken
 urllib3>=2.6.0

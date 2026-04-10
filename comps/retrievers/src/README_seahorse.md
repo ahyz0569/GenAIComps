@@ -8,7 +8,7 @@ Before using this microservice, you need a Seahorse Cloud table with an API endp
 2. Create a table — an API endpoint (`SEAHORSE_BASE_URL`) and API key (`SEAHORSE_API_KEY`) will be issued upon creation
 3. Use the issued endpoint and key as environment variables below
 
-## 1. 🚀Start Microservice with Python (Option 1)
+## 1. 🚀 Start Microservice with Python (Option 1)
 
 ### 1.1 Install Requirements
 
@@ -40,7 +40,7 @@ export RETRIEVER_COMPONENT_NAME="OPEA_RETRIEVER_SEAHORSE"
 python opea_retrievers_microservice.py
 ```
 
-## 2. 🚀Start Microservice with Docker (Option 2)
+## 2. 🚀 Start Microservice with Docker (Option 2)
 
 ### 2.1 Setup Environment Variables
 
@@ -64,7 +64,7 @@ docker build -t opea/retriever:latest --build-arg https_proxy=$https_proxy --bui
 docker run -d --name="retriever-seahorse-server" -p 7000:7000 --ipc=host -e SEAHORSE_BASE_URL=$SEAHORSE_BASE_URL -e SEAHORSE_API_KEY=$SEAHORSE_API_KEY -e SEAHORSE_EMBEDDING_MODE=$SEAHORSE_EMBEDDING_MODE -e RETRIEVER_COMPONENT_NAME=$RETRIEVER_COMPONENT_NAME opea/retriever:latest
 ```
 
-## 🚀3. Consume Retriever Service
+## 🚀 3. Consume Retriever Service
 
 ### 3.1 Check Service Status
 
