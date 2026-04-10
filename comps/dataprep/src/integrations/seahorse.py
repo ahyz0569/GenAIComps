@@ -6,8 +6,11 @@ import os
 from pathlib import Path
 from typing import List, Optional, Union
 
+import requests
 from fastapi import Body, File, Form, HTTPException, UploadFile
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import HTMLHeaderTextSplitter
 from seahorse_vector_store import SeahorseVectorStore
 
@@ -74,8 +77,6 @@ class OpeaSeahorseDataprep(OpeaComponent):
                     status_code=400,
                     detail="You MUST offer the `HF_TOKEN` when using `TEI_EMBEDDING_ENDPOINT`.",
                 )
-            import requests
-            from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 
             response = requests.get(TEI_EMBEDDING_ENDPOINT + "/info")
             if response.status_code != 200:
@@ -90,7 +91,6 @@ class OpeaSeahorseDataprep(OpeaComponent):
         else:
             if logflag:
                 logger.info(f"[ init embedder ] LOCAL EMBED_MODEL: {EMBED_MODEL}")
-            from langchain_huggingface import HuggingFaceEmbeddings
 
             return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
 
