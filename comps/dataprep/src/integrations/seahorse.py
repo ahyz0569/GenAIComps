@@ -1,4 +1,4 @@
-# Copyright (C) 2024 Intel Corporation
+# Copyright (C) 2026 Dnotitia
 # SPDX-License-Identifier: Apache-2.0
 
 import json
