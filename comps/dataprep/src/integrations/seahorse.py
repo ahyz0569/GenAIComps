@@ -261,31 +261,33 @@ class OpeaSeahorseDataprep(OpeaComponent):
         """Delete file data from Seahorse Cloud.
 
         file_path:
-        - "all": delete all data
+        - "all": delete all data from Seahorse Cloud and local upload folder
         - specific path: delete chunks for that file (by metadata filter)
         """
         if logflag:
             logger.info(f"[ delete ] file_path: {file_path}")
 
         if file_path == "all":
-            # TODO: langchain-seahorse delete() 또는 POST /v2/data/delete API 호출
+            self.vectorstore.delete(delete_all=True)
+            if logflag:
+                logger.info("[ delete ] successfully deleted all data from Seahorse Cloud")
             try:
                 remove_folder_with_ignore(self.upload_folder)
             except Exception as e:
                 logger.error(f"[ delete ] Failed to remove upload folder: {e}")
             create_upload_folder(self.upload_folder)
             if logflag:
-                logger.info("[ delete ] successfully deleted all files")
+                logger.info("[ delete ] successfully deleted all local files")
             return {"status": True}
 
         encode_file_name = encode_filename(file_path)
         delete_path = Path(self.upload_folder + "/" + encode_file_name)
 
         if delete_path.exists():
-            # TODO: langchain-seahorse delete(ids=...) 또는 metadata filter 기반 삭제
+            self.vectorstore.delete(filter={"filename": file_path})
             delete_path.unlink()
             if logflag:
-                logger.info(f"[ delete ] file {file_path} deleted")
+                logger.info(f"[ delete ] file {file_path} deleted from Seahorse Cloud and local")
             return {"status": True}
         else:
             raise HTTPException(status_code=404, detail="File not found.")
