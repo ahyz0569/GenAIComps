@@ -131,6 +131,17 @@ class OpeaSeahorseRetriever(OpeaComponent):
             logger.error(f"[ check health ] Failed to connect to Seahorse Cloud: {e}")
             return False
 
+    @staticmethod
+    def _passes_score_threshold(score: float, threshold: float, *, is_distance: bool) -> bool:
+        """Match score semantics returned by the Seahorse SDK.
+
+        Dense vector searches return distance values, where lower is better.
+        Sparse and hybrid searches return similarity scores, where higher is better.
+        """
+        if is_distance:
+            return score <= threshold
+        return score >= threshold
+
     async def _search_builtin(self, input: EmbedDoc) -> list:
         """builtin mode: text query → server embeds with same built-in model → search."""
         if input.search_type == "similarity_score_threshold":
@@ -140,7 +151,12 @@ class OpeaSeahorseRetriever(OpeaComponent):
                 k=input.k,
                 retrieval_mode=self.search_mode,
             )
-            return [doc for doc, score in docs_and_scores if score >= input.score_threshold]
+            uses_distance = self.search_mode == SearchMode.DENSE
+            return [
+                doc
+                for doc, score in docs_and_scores
+                if self._passes_score_threshold(score, input.score_threshold, is_distance=uses_distance)
+            ]
 
         return await asyncio.to_thread(
             self.vectorstore.similarity_search,
@@ -161,7 +177,11 @@ class OpeaSeahorseRetriever(OpeaComponent):
                 embedding=input.embedding,
                 k=input.k,
             )
-            return [doc for doc, score in docs_and_scores if score >= input.score_threshold]
+            return [
+                doc
+                for doc, score in docs_and_scores
+                if self._passes_score_threshold(score, input.score_threshold, is_distance=True)
+            ]
 
         return await asyncio.to_thread(
             self.vectorstore.similarity_search_by_vector,

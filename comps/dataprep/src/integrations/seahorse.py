@@ -284,10 +284,12 @@ class OpeaSeahorseDataprep(OpeaComponent):
         delete_path = Path(self.upload_folder + "/" + encode_file_name)
 
         if delete_path.exists():
-            self.vectorstore.delete(filter={"filename": file_path})
+            self.vectorstore.delete(filter={"filename": encode_file_name})
             delete_path.unlink()
             if logflag:
-                logger.info(f"[ delete ] file {file_path} deleted from Seahorse Cloud and local")
+                logger.info(
+                    f"[ delete ] file {file_path} (stored as {encode_file_name}) deleted from Seahorse Cloud and local"
+                )
             return {"status": True}
         else:
             raise HTTPException(status_code=404, detail="File not found.")

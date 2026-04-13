@@ -35,6 +35,9 @@ export HF_TOKEN=${your_huggingface_token}
 ```
 
 If `TEI_EMBEDDING_ENDPOINT` is not set, Dataprep falls back to local HuggingFace embeddings.
+The bundled `dataprep-seahorse` Docker Compose service forwards both `TEI_EMBEDDING_ENDPOINT`
+and `HF_TOKEN` into the container, so export them before `docker compose up dataprep-seahorse`
+when you want TEI-backed external embeddings.
 
 ### Build Docker Image
 
@@ -47,6 +50,13 @@ docker build -t opea/dataprep:latest --build-arg https_proxy=$https_proxy --buil
 
 ```bash
 docker run -d --name="dataprep-seahorse-server" -p 5000:5000 --ipc=host -e SEAHORSE_BASE_URL=$SEAHORSE_BASE_URL -e SEAHORSE_API_KEY=$SEAHORSE_API_KEY -e SEAHORSE_EMBEDDING_MODE=$SEAHORSE_EMBEDDING_MODE -e TEI_EMBEDDING_ENDPOINT=$TEI_EMBEDDING_ENDPOINT -e HF_TOKEN=$HF_TOKEN -e DATAPREP_COMPONENT_NAME=$DATAPREP_COMPONENT_NAME opea/dataprep:latest
+```
+
+### Run Docker Compose Service
+
+```bash
+cd ../deployment/docker_compose
+docker compose up dataprep-seahorse
 ```
 
 ## Invoke Microservice
