@@ -454,7 +454,7 @@ langchain-opengauss==0.1.5
     # via -r ./comps/retrievers/src/requirements.in
 langchain-pinecone==0.2.13
     # via -r ./comps/retrievers/src/requirements.in
-langchain-seahorse==0.2.0
+langchain-seahorse==0.3.0
     # via -r ./comps/retrievers/src/requirements.in
 langchain-text-splitters==0.3.11
     # via langchain

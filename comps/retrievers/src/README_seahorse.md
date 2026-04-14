@@ -14,7 +14,7 @@ Before using this microservice, you need a Seahorse Cloud table with an API endp
 
 ```bash
 pip install -r requirements.txt
-pip install langchain-seahorse>=0.2.0
+pip install langchain-seahorse>=0.3.0
 ```
 
 ### 1.2 Setup Environment Variables
@@ -115,6 +115,6 @@ curl http://${your_ip}:7000/v1/retrieval \
 | Mode | Env Var | Search Method | TEI Required? |
 |---|---|---|---|
 | `builtin` | `SEAHORSE_EMBEDDING_MODE=builtin` | `similarity_search(query=text)` — server embeds query | No |
-| `external` | `SEAHORSE_EMBEDDING_MODE=external` | `similarity_search_by_vector(embedding=vec)` — dense-only query vector search | No (falls back to local HuggingFace) |
+| `external` | `SEAHORSE_EMBEDDING_MODE=external` | `similarity_search_by_vector(embedding=vec)` — dense-only query vector search. External embeddings apply to dense vectors only; sparse always uses the built-in embedding path. | No (falls back to local HuggingFace) |
 
 > Seahorse Cloud does not support MMR search. MMR requests fall back to similarity search.

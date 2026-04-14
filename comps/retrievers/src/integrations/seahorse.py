@@ -18,7 +18,6 @@ from .config import (
     SEAHORSE_API_KEY,
     SEAHORSE_BASE_URL,
     SEAHORSE_EMBEDDING_MODE,
-    SEAHORSE_INDEX_NAME,
     SEAHORSE_SEARCH_MODE,
     TEI_EMBEDDING_ENDPOINT,
 )
@@ -106,7 +105,6 @@ class OpeaSeahorseRetriever(OpeaComponent):
         kwargs = {
             "api_key": SEAHORSE_API_KEY,
             "base_url": SEAHORSE_BASE_URL,
-            "dense_column": SEAHORSE_INDEX_NAME,
         }
         if self.use_builtin:
             kwargs["use_builtin_embedding"] = True

@@ -255,7 +255,6 @@ services:
       SEAHORSE_SEARCH_MODE: ${SEAHORSE_SEARCH_MODE:-hybrid}
       TEI_EMBEDDING_ENDPOINT: ${TEI_EMBEDDING_ENDPOINT}
       HF_TOKEN: ${HF_TOKEN}
-      SEAHORSE_INDEX_NAME: ${SEAHORSE_INDEX_NAME:-embedding}
 
 networks:
   default:

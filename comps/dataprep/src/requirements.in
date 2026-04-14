@@ -25,7 +25,7 @@ langchain-mariadb
 langchain-openai
 langchain-pinecone
 langchain-redis
-langchain-seahorse>=0.2.0
+langchain-seahorse>=0.3.0
 langchain-text-splitters
 langchain-vdms>=0.1.4
 langchain_huggingface

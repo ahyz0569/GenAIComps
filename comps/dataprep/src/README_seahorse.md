@@ -26,6 +26,7 @@ export DATAPREP_COMPONENT_NAME="OPEA_DATAPREP_SEAHORSE"
 
 > **⚠️ Important**: `SEAHORSE_EMBEDDING_MODE` must be the same value for both Retriever and Dataprep services.
 > If Dataprep uses `SEAHORSE_EMBEDDING_MODE="external"`, Retriever must also use `SEAHORSE_EMBEDDING_MODE="external"` and `SEAHORSE_SEARCH_MODE="dense"`.
+> With `langchain-seahorse>=0.3.0`, dense and sparse vector columns are resolved from the Seahorse table schema automatically, so no extra index-column environment override is needed.
 
 For `external` mode, also set:
 
@@ -38,6 +39,8 @@ If `TEI_EMBEDDING_ENDPOINT` is not set, Dataprep falls back to local HuggingFace
 The bundled `dataprep-seahorse` Docker Compose service forwards both `TEI_EMBEDDING_ENDPOINT`
 and `HF_TOKEN` into the container, so export them before `docker compose up dataprep-seahorse`
 when you want TEI-backed external embeddings.
+
+In `external` mode, external embeddings apply to dense vectors only; sparse always uses the built-in embedding path.
 
 ### Build Docker Image
 

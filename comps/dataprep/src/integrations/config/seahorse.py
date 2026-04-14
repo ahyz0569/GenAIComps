@@ -5,7 +5,6 @@ import os
 
 SEAHORSE_BASE_URL = os.getenv("SEAHORSE_BASE_URL", "")
 SEAHORSE_API_KEY = os.getenv("SEAHORSE_API_KEY", "")
-SEAHORSE_INDEX_NAME = os.getenv("SEAHORSE_INDEX_NAME", "embedding")
 SEAHORSE_EMBEDDING_MODE = os.getenv("SEAHORSE_EMBEDDING_MODE", "builtin")
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
