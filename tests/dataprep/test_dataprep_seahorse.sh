@@ -10,9 +10,13 @@ export TAG="comps"
 echo "REGISTRY=IMAGE_REPO=${IMAGE_REPO}"
 echo "TAG=${TAG}"
 
-WORKPATH=$(dirname "$PWD")
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+WORKPATH=$(cd "${SCRIPT_DIR}/../.." && pwd)
 LOG_PATH="$WORKPATH/tests"
-export host_ip=$(hostname -I | awk '{print $1}')
+
+source "${WORKPATH}/tests/utils/seahorse_helpers.sh"
+require_seahorse_credentials_or_skip
+detect_host_ip
 service_name="dataprep-seahorse-server"
 
 function build_docker_images() {
@@ -41,8 +45,6 @@ function start_service() {
 }
 
 function validate_microservice() {
-    export PATH="${HOME}/miniforge3/bin:$PATH"
-    source activate
     URL="http://${host_ip}:$DATAPREP_PORT"
 
     # Test ingest
