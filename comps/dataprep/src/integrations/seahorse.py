@@ -4,10 +4,9 @@
 import json
 import os
 from pathlib import Path
-from typing import List, Optional, Union
 
 import requests
-from fastapi import Body, File, Form, HTTPException, UploadFile
+from fastapi import Body, HTTPException
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -20,6 +19,7 @@ from comps.dataprep.src.utils import (
     create_upload_folder,
     document_loader,
     encode_filename,
+    get_file_structure,
     get_separators,
     get_tables_result,
     parse_html_new,
@@ -27,19 +27,22 @@ from comps.dataprep.src.utils import (
     save_content_to_local_disk,
 )
 
-from .config.seahorse import (
-    EMBED_MODEL,
-    HF_TOKEN,
-    SEAHORSE_API_KEY,
-    SEAHORSE_BASE_URL,
-    SEAHORSE_EMBEDDING_MODE,
-    TEI_EMBEDDING_ENDPOINT,
-)
-
 logger = CustomLogger("seahorse_dataprep")
 logflag = os.getenv("LOGFLAG", False)
 upload_folder = "./uploaded_files/"
 TEI_INFO_TIMEOUT_SECONDS = 10
+
+# Embedding model
+EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
+# TEI Embedding endpoint
+TEI_EMBEDDING_ENDPOINT = os.getenv("TEI_EMBEDDING_ENDPOINT", "")
+# Huggingface API token for TEI embedding endpoint
+HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN", "")
+
+# Seahorse Cloud configuration
+SEAHORSE_BASE_URL = os.getenv("SEAHORSE_BASE_URL", "")
+SEAHORSE_API_KEY = os.getenv("SEAHORSE_API_KEY", "")
+SEAHORSE_EMBEDDING_MODE = os.getenv("SEAHORSE_EMBEDDING_MODE", "builtin")
 
 
 @OpeaComponentRegistry.register("OPEA_DATAPREP_SEAHORSE")
@@ -284,8 +287,6 @@ class OpeaSeahorseDataprep(OpeaComponent):
             if logflag:
                 logger.info("No file uploaded, return empty list.")
             return []
-
-        from comps.dataprep.src.utils import get_file_structure
 
         file_content = get_file_structure(self.upload_folder)
         if logflag:
