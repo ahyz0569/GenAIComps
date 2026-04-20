@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (C) 2026 Dnotitia
+# SPDX-License-Identifier: Apache-2.0
 
 require_seahorse_credentials_or_skip() {
     local missing=()

@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Dnotitia
 # SPDX-License-Identifier: Apache-2.0
 
-set -x
+set -xe
 
 IMAGE_REPO=${IMAGE_REPO:-"opea"}
 export REGISTRY=${IMAGE_REPO}
@@ -14,6 +14,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WORKPATH=$(cd "${SCRIPT_DIR}/../.." && pwd)
 LOG_PATH="$WORKPATH/tests"
 
+source "${SCRIPT_DIR}/dataprep_utils.sh"
 source "${WORKPATH}/tests/utils/seahorse_helpers.sh"
 require_seahorse_credentials_or_skip
 detect_host_ip
@@ -41,45 +42,43 @@ function start_service() {
     docker compose -f compose.yaml up dataprep-seahorse -d \
         > ${LOG_PATH}/start_services_with_compose.log
 
-    sleep 30s
+    check_healthy "${service_name}" || exit 1
 }
 
 function validate_microservice() {
-    URL="http://${host_ip}:$DATAPREP_PORT"
+    # Start clean so per-format counts are deterministic.
+    delete_all "${host_ip}" "${DATAPREP_PORT}"
+    check_result "dataprep - reset" '{"status":true}' "${service_name}" ${LOG_PATH}/dataprep_del.log
 
-    # Test ingest
-    echo "Testing file ingestion..."
-    echo "This is a test document for Seahorse Cloud integration." > /tmp/test_seahorse.txt
-    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-        -F "files=@/tmp/test_seahorse.txt" "$URL/v1/dataprep/ingest")
-    if [ "$HTTP_STATUS" -eq 200 ]; then
-        echo "[ dataprep ingest ] HTTP status is 200."
-    else
-        echo "[ dataprep ingest ] HTTP status is not 200. Received status was $HTTP_STATUS"
-        docker logs ${service_name} >> ${LOG_PATH}/dataprep.log
-        exit 1
+    # txt
+    ingest_txt "${host_ip}" "${DATAPREP_PORT}" "seahorse"
+    check_result "dataprep - upload - txt" "Data preparation succeeded" "${service_name}" ${LOG_PATH}/dataprep_upload_file.log
+
+    # docx
+    ingest_docx "${host_ip}" "${DATAPREP_PORT}" "seahorse"
+    check_result "dataprep - upload - docx" "Data preparation succeeded" "${service_name}" ${LOG_PATH}/dataprep_upload_file.log
+
+    # pdf
+    ingest_pdf "${host_ip}" "${DATAPREP_PORT}" "seahorse"
+    check_result "dataprep - upload - pdf" "Data preparation succeeded" "${service_name}" ${LOG_PATH}/dataprep_upload_file.log
+
+    # external link (skip in fully air-gapped environments by setting SKIP_LINK_TEST=1)
+    if [[ "${SKIP_LINK_TEST:-0}" != "1" ]]; then
+        ingest_external_link "${host_ip}" "${DATAPREP_PORT}"
+        check_result "dataprep - upload - link" "Data preparation succeeded" "${service_name}" ${LOG_PATH}/dataprep_upload_file.log
     fi
 
-    # Test get files
-    echo "Testing get files..."
-    CONTENT=$(curl -s -X POST "$URL/v1/dataprep/get" \
-        | tee ${LOG_PATH}/dataprep.log)
-    echo "[ dataprep get ] Response: $CONTENT"
+    # get the local file index returned by the dataprep service
+    get_all "${host_ip}" "${DATAPREP_PORT}"
+    check_result "dataprep - get" '"name":' "${service_name}" ${LOG_PATH}/dataprep_file.log
 
-    # Test delete
-    echo "Testing delete all..."
-    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-        -H "Content-Type: application/json" \
-        -d '{"file_path": "all"}' "$URL/v1/dataprep/delete")
-    if [ "$HTTP_STATUS" -eq 200 ]; then
-        echo "[ dataprep delete ] HTTP status is 200."
-    else
-        echo "[ dataprep delete ] HTTP status is not 200. Received status was $HTTP_STATUS"
-        docker logs ${service_name} >> ${LOG_PATH}/dataprep.log
-        exit 1
-    fi
+    # delete a single file by path (txt fixture is named ingest_dataprep.txt)
+    delete_single "${host_ip}" "${DATAPREP_PORT}"
+    check_result "dataprep - del single" '{"status":true}' "${service_name}" ${LOG_PATH}/dataprep_del.log
 
-    rm -f /tmp/test_seahorse.txt
+    # delete everything
+    delete_all "${host_ip}" "${DATAPREP_PORT}"
+    check_result "dataprep - del all" '{"status":true}' "${service_name}" ${LOG_PATH}/dataprep_del.log
 }
 
 function stop_docker() {
