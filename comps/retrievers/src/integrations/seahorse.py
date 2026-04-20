@@ -148,7 +148,12 @@ class OpeaSeahorseRetriever(OpeaComponent):
         return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
 
     def _initialize_search_mode(self) -> SearchMode:
-        requested_mode = SEARCH_MODE_MAP.get(SEAHORSE_SEARCH_MODE, SearchMode.HYBRID)
+        if SEAHORSE_SEARCH_MODE not in SEARCH_MODE_MAP:
+            raise RuntimeError(
+                f"Unknown SEAHORSE_SEARCH_MODE={SEAHORSE_SEARCH_MODE!r}. "
+                f"Supported values: {sorted(SEARCH_MODE_MAP)}"
+            )
+        requested_mode = SEARCH_MODE_MAP[SEAHORSE_SEARCH_MODE]
         if not self.use_builtin and requested_mode != SearchMode.DENSE:
             logger.warning(
                 "[ init ] external embedding mode only supports dense search. "
