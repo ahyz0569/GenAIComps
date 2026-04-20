@@ -26,7 +26,6 @@ export DATAPREP_COMPONENT_NAME="OPEA_DATAPREP_SEAHORSE"
 
 > **⚠️ Important**: `SEAHORSE_EMBEDDING_MODE` must be the same value for both Retriever and Dataprep services.
 > If Dataprep uses `SEAHORSE_EMBEDDING_MODE="external"`, Retriever must also use `SEAHORSE_EMBEDDING_MODE="external"` and `SEAHORSE_SEARCH_MODE="dense"`.
-> With `langchain-seahorse>=0.3.0`, dense and sparse vector columns are resolved from the Seahorse table schema automatically, so no extra index-column environment override is needed.
 
 For `external` mode, also set:
 
