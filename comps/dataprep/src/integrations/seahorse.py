@@ -39,6 +39,7 @@ from .config.seahorse import (
 logger = CustomLogger("seahorse_dataprep")
 logflag = os.getenv("LOGFLAG", False)
 upload_folder = "./uploaded_files/"
+TEI_INFO_TIMEOUT_SECONDS = 10
 
 
 @OpeaComponentRegistry.register("OPEA_DATAPREP_SEAHORSE")
@@ -60,7 +61,49 @@ class OpeaSeahorseDataprep(OpeaComponent):
         self.vectorstore = self._initialize_vectorstore()
         health_status = self.check_health()
         if not health_status:
-            logger.error("OpeaSeahorseDataprep health check failed.")
+            raise RuntimeError("OpeaSeahorseDataprep health check failed.")
+
+    @staticmethod
+    def _require_env_config() -> None:
+        missing = []
+        if not SEAHORSE_BASE_URL:
+            missing.append("SEAHORSE_BASE_URL")
+        if not SEAHORSE_API_KEY:
+            missing.append("SEAHORSE_API_KEY")
+        if missing:
+            raise RuntimeError(f"Missing required Seahorse configuration: {', '.join(missing)}")
+
+    @staticmethod
+    def _fetch_tei_model_id() -> str:
+        try:
+            response = requests.get(f"{TEI_EMBEDDING_ENDPOINT}/info", timeout=TEI_INFO_TIMEOUT_SECONDS)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available: {exc}",
+            ) from exc
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available.",
+            )
+
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} returned invalid JSON.",
+            ) from exc
+
+        model_id = payload.get("model_id") if isinstance(payload, dict) else None
+        if not model_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} did not return model_id.",
+            )
+        return model_id
 
     def _initialize_embedder(self):
         if self.use_builtin:
@@ -76,14 +119,7 @@ class OpeaSeahorseDataprep(OpeaComponent):
                     status_code=400,
                     detail="You MUST offer the `HF_TOKEN` when using `TEI_EMBEDDING_ENDPOINT`.",
                 )
-
-            response = requests.get(TEI_EMBEDDING_ENDPOINT + "/info")
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available.",
-                )
-            model_id = response.json()["model_id"]
+            model_id = self._fetch_tei_model_id()
             return HuggingFaceInferenceAPIEmbeddings(
                 api_key=HF_TOKEN, model_name=model_id, api_url=TEI_EMBEDDING_ENDPOINT
             )
@@ -94,6 +130,7 @@ class OpeaSeahorseDataprep(OpeaComponent):
             return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
 
     def _initialize_vectorstore(self) -> SeahorseVectorStore:
+        self._require_env_config()
         kwargs = {
             "api_key": SEAHORSE_API_KEY,
             "base_url": SEAHORSE_BASE_URL,

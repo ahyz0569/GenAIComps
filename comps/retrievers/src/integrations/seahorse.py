@@ -24,11 +24,18 @@ from .config import (
 
 logger = CustomLogger("seahorse_retrievers")
 logflag = os.getenv("LOGFLAG", False)
+TEI_INFO_TIMEOUT_SECONDS = 10
 
 SEARCH_MODE_MAP = {
     "dense": SearchMode.DENSE,
     "sparse": SearchMode.SPARSE,
     "hybrid": SearchMode.HYBRID,
+}
+SUPPORTED_SEARCH_TYPES = {
+    "similarity",
+    "similarity_score_threshold",
+    "similarity_distance_threshold",
+    "mmr",
 }
 
 
@@ -55,7 +62,66 @@ class OpeaSeahorseRetriever(OpeaComponent):
         self.vectorstore = self._initialize_vectorstore()
         health_status = self.check_health()
         if not health_status:
-            logger.error("OpeaSeahorseRetriever health check failed.")
+            raise RuntimeError("OpeaSeahorseRetriever health check failed.")
+
+    @staticmethod
+    def _require_env_config() -> None:
+        missing = []
+        if not SEAHORSE_BASE_URL:
+            missing.append("SEAHORSE_BASE_URL")
+        if not SEAHORSE_API_KEY:
+            missing.append("SEAHORSE_API_KEY")
+        if missing:
+            raise RuntimeError(f"Missing required Seahorse configuration: {', '.join(missing)}")
+
+    @staticmethod
+    def _fetch_tei_model_id() -> str:
+        try:
+            response = requests.get(f"{TEI_EMBEDDING_ENDPOINT}/info", timeout=TEI_INFO_TIMEOUT_SECONDS)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available: {exc}",
+            ) from exc
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=400,
+                detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available.",
+            )
+
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} returned invalid JSON.",
+            ) from exc
+
+        model_id = payload.get("model_id") if isinstance(payload, dict) else None
+        if not model_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} did not return model_id.",
+            )
+        return model_id
+
+    @staticmethod
+    def _normalize_search_type(search_type: str) -> str:
+        if search_type not in SUPPORTED_SEARCH_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unsupported search_type: {search_type}")
+        if search_type == "mmr":
+            logger.info("[ invoke ] MMR not supported by Seahorse, falling back to similarity search")
+            return "similarity"
+        return search_type
+
+    @staticmethod
+    def _validate_external_embedding(embedding) -> None:
+        if embedding is None or (isinstance(embedding, (list, tuple)) and len(embedding) == 0):
+            raise HTTPException(
+                status_code=400,
+                detail="embedding must be provided when SEAHORSE_EMBEDDING_MODE=external.",
+            )
 
     def _initialize_embedder(self):
         if self.use_builtin:
@@ -71,14 +137,7 @@ class OpeaSeahorseRetriever(OpeaComponent):
                     status_code=400,
                     detail="You MUST offer the `HF_TOKEN` when using `TEI_EMBEDDING_ENDPOINT`.",
                 )
-
-            response = requests.get(TEI_EMBEDDING_ENDPOINT + "/info")
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"TEI embedding endpoint {TEI_EMBEDDING_ENDPOINT} is not available.",
-                )
-            model_id = response.json()["model_id"]
+            model_id = self._fetch_tei_model_id()
             return HuggingFaceInferenceAPIEmbeddings(
                 api_key=HF_TOKEN, model_name=model_id, api_url=TEI_EMBEDDING_ENDPOINT
             )
@@ -99,6 +158,7 @@ class OpeaSeahorseRetriever(OpeaComponent):
         return requested_mode
 
     def _initialize_vectorstore(self) -> SeahorseVectorStore:
+        self._require_env_config()
         if logflag:
             logger.info(f"[ init ] SEAHORSE_BASE_URL: {SEAHORSE_BASE_URL}")
             logger.info(f"[ init ] SEAHORSE_EMBEDDING_MODE: {SEAHORSE_EMBEDDING_MODE}")
@@ -140,9 +200,9 @@ class OpeaSeahorseRetriever(OpeaComponent):
             return score <= threshold
         return score >= threshold
 
-    async def _search_builtin(self, input: EmbedDoc) -> list:
+    async def _search_builtin(self, input: EmbedDoc, search_type: str) -> list:
         """builtin mode: text query → server embeds with same built-in model → search."""
-        if input.search_type == "similarity_score_threshold":
+        if search_type == "similarity_score_threshold":
             docs_and_scores = await asyncio.to_thread(
                 self.vectorstore.similarity_search_with_score,
                 query=input.text,
@@ -156,6 +216,29 @@ class OpeaSeahorseRetriever(OpeaComponent):
                 if self._passes_score_threshold(score, input.score_threshold, is_distance=uses_distance)
             ]
 
+        if search_type == "similarity_distance_threshold":
+            if input.distance_threshold is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="distance_threshold must be provided for similarity_distance_threshold retriever",
+                )
+            if self.search_mode != SearchMode.DENSE:
+                raise HTTPException(
+                    status_code=400,
+                    detail="similarity_distance_threshold is only supported for dense Seahorse search.",
+                )
+            docs_and_scores = await asyncio.to_thread(
+                self.vectorstore.similarity_search_with_score,
+                query=input.text,
+                k=input.k,
+                retrieval_mode=self.search_mode,
+            )
+            return [
+                doc
+                for doc, score in docs_and_scores
+                if self._passes_score_threshold(score, input.distance_threshold, is_distance=True)
+            ]
+
         return await asyncio.to_thread(
             self.vectorstore.similarity_search,
             query=input.text,
@@ -163,13 +246,15 @@ class OpeaSeahorseRetriever(OpeaComponent):
             retrieval_mode=self.search_mode,
         )
 
-    async def _search_external(self, input: EmbedDoc) -> list:
+    async def _search_external(self, input: EmbedDoc, search_type: str) -> list:
         """external mode: use pre-computed OPEA TEI embedding vector for search.
 
         Note: similarity_search_by_vector() does not accept retrieval_mode parameter.
         External embedding mode is always dense-only, regardless of SEAHORSE_SEARCH_MODE.
         """
-        if input.search_type == "similarity_score_threshold":
+        self._validate_external_embedding(input.embedding)
+
+        if search_type == "similarity_score_threshold":
             docs_and_scores = await asyncio.to_thread(
                 self.vectorstore.similarity_search_by_vector_with_score,
                 embedding=input.embedding,
@@ -179,6 +264,23 @@ class OpeaSeahorseRetriever(OpeaComponent):
                 doc
                 for doc, score in docs_and_scores
                 if self._passes_score_threshold(score, input.score_threshold, is_distance=True)
+            ]
+
+        if search_type == "similarity_distance_threshold":
+            if input.distance_threshold is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="distance_threshold must be provided for similarity_distance_threshold retriever",
+                )
+            docs_and_scores = await asyncio.to_thread(
+                self.vectorstore.similarity_search_by_vector_with_score,
+                embedding=input.embedding,
+                k=input.k,
+            )
+            return [
+                doc
+                for doc, score in docs_and_scores
+                if self._passes_score_threshold(score, input.distance_threshold, is_distance=True)
             ]
 
         return await asyncio.to_thread(
@@ -198,13 +300,12 @@ class OpeaSeahorseRetriever(OpeaComponent):
         if logflag:
             logger.info(input)
 
-        if input.search_type == "mmr":
-            logger.info("[ invoke ] MMR not supported by Seahorse, falling back to similarity search")
+        search_type = self._normalize_search_type(input.search_type)
 
         if self.use_builtin:
-            search_res = await self._search_builtin(input)
+            search_res = await self._search_builtin(input, search_type)
         else:
-            search_res = await self._search_external(input)
+            search_res = await self._search_external(input, search_type)
 
         if logflag:
             logger.info(f"[ invoke ] retrieve result: {search_res}")
