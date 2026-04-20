@@ -1,6 +1,8 @@
+# Copyright (C) 2026 Dnotitia
+# SPDX-License-Identifier: Apache-2.0
+
 import asyncio
 import importlib.util
-import os
 import sys
 import types
 import unittest
@@ -167,6 +169,24 @@ class TestSeahorseRetriever(unittest.TestCase):
         with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
             with self.assertRaises(RuntimeError):
                 module.OpeaSeahorseRetriever("OPEA_RETRIEVER_SEAHORSE", "test")
+
+    def test_init_raises_when_search_mode_unknown(self):
+        module = import_retriever_module(
+            {
+                "SEAHORSE_BASE_URL": "https://example.com",
+                "SEAHORSE_API_KEY": "secret",
+                "SEAHORSE_EMBEDDING_MODE": "builtin",
+                "SEAHORSE_SEARCH_MODE": "hybird",
+            }
+        )
+
+        vectorstore = MagicMock()
+        vectorstore._client.get_indexed_row_count.return_value = {"total_row_count": 1}
+
+        with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
+            with self.assertRaises(RuntimeError) as ctx:
+                module.OpeaSeahorseRetriever("OPEA_RETRIEVER_SEAHORSE", "test")
+        self.assertIn("Unknown SEAHORSE_SEARCH_MODE", str(ctx.exception))
 
     def test_invalid_search_type_raises_http_exception(self):
         module = import_retriever_module(

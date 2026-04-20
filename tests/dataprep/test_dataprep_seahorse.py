@@ -1,5 +1,7 @@
+# Copyright (C) 2026 Dnotitia
+# SPDX-License-Identifier: Apache-2.0
+
 import importlib.util
-import os
 import sys
 import types
 import unittest
@@ -80,10 +82,9 @@ def _package(name):
 
 
 def import_dataprep_module(env):
+    """Load the dataprep seahorse integration with stubbed dependencies and env vars."""
     package_name = "testpkg_dataprep"
     module_name = f"{package_name}.seahorse"
-    config_package_name = f"{package_name}.config"
-    config_name = f"{config_package_name}.seahorse"
 
     for name in list(sys.modules):
         if name.startswith(package_name):
@@ -92,9 +93,6 @@ def import_dataprep_module(env):
     fake_fastapi = types.ModuleType("fastapi")
     fake_fastapi.HTTPException = FakeHTTPException
     fake_fastapi.Body = lambda default=None, embed=False: default
-    fake_fastapi.File = lambda default=None: default
-    fake_fastapi.Form = lambda default=None: default
-    fake_fastapi.UploadFile = object
 
     fake_requests = types.ModuleType("requests")
     fake_requests.get = MagicMock()
@@ -130,28 +128,31 @@ def import_dataprep_module(env):
     fake_utils.create_upload_folder = lambda path: None
     fake_utils.document_loader = lambda path: ""
     fake_utils.encode_filename = lambda name: name.replace("/", "_")
+    fake_utils.get_file_structure = lambda path: []
     fake_utils.get_separators = lambda: ["\n\n", "\n", " "]
     fake_utils.get_tables_result = lambda path, strategy: []
     fake_utils.parse_html_new = lambda links, chunk_size=None, chunk_overlap=None: ""
     fake_utils.remove_folder_with_ignore = lambda path: None
     fake_utils.save_content_to_local_disk = lambda path, file: None
 
-    config_package = _package(config_package_name)
-    config_module = types.ModuleType(config_name)
-    config_module.EMBED_MODEL = env.get("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
-    config_module.HF_TOKEN = env.get("HF_TOKEN", "")
-    config_module.SEAHORSE_API_KEY = env.get("SEAHORSE_API_KEY", "")
-    config_module.SEAHORSE_BASE_URL = env.get("SEAHORSE_BASE_URL", "")
-    config_module.SEAHORSE_EMBEDDING_MODE = env.get("SEAHORSE_EMBEDDING_MODE", "builtin")
-    config_module.TEI_EMBEDDING_ENDPOINT = env.get("TEI_EMBEDDING_ENDPOINT", "")
-
     dataprep_package = _package(package_name)
-    dataprep_package.config = config_package
 
     module_path = Path(__file__).resolve().parents[2] / "comps" / "dataprep" / "src" / "integrations" / "seahorse.py"
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     module = importlib.util.module_from_spec(spec)
     module.__package__ = package_name
+
+    env_defaults = {
+        "SEAHORSE_BASE_URL": "",
+        "SEAHORSE_API_KEY": "",
+        "SEAHORSE_EMBEDDING_MODE": "builtin",
+        "TEI_EMBEDDING_ENDPOINT": "",
+        "EMBED_MODEL": "BAAI/bge-base-en-v1.5",
+        "HF_TOKEN": "",
+        "HUGGINGFACEHUB_API_TOKEN": "",
+        "LOGFLAG": "",
+    }
+    env_defaults.update(env)
 
     with patch.dict(
         sys.modules,
@@ -173,12 +174,10 @@ def import_dataprep_module(env):
             "comps.dataprep.src": _package("comps.dataprep.src"),
             "comps.dataprep.src.utils": fake_utils,
             package_name: dataprep_package,
-            config_package_name: config_package,
-            config_name: config_module,
             module_name: module,
         },
         clear=False,
-    ):
+    ), patch.dict("os.environ", env_defaults, clear=False):
         spec.loader.exec_module(module)
     return module
 
