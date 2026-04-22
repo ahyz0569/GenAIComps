@@ -178,7 +178,7 @@ class TestSeahorseRetriever(unittest.TestCase):
                 "SEAHORSE_BASE_URL": "https://example.com",
                 "SEAHORSE_API_KEY": "secret",
                 "SEAHORSE_EMBEDDING_MODE": "builtin",
-                "SEAHORSE_SEARCH_MODE": "hybird",
+                "SEAHORSE_SEARCH_MODE": "not_a_real_mode",
             }
         )
 
