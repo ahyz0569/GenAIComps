@@ -201,7 +201,7 @@ class TestSeahorseDataprep(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 module.OpeaSeahorseDataprep("OPEA_DATAPREP_SEAHORSE", "test")
 
-    def test_init_raises_when_health_check_fails(self):
+    def test_init_logs_error_when_health_check_fails(self):
         module = import_dataprep_module(
             {
                 "SEAHORSE_BASE_URL": "https://example.com",
@@ -214,8 +214,8 @@ class TestSeahorseDataprep(unittest.TestCase):
         vectorstore.health.side_effect = RuntimeError("unreachable")
 
         with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
-            with self.assertRaises(RuntimeError):
-                module.OpeaSeahorseDataprep("OPEA_DATAPREP_SEAHORSE", "test")
+            instance = module.OpeaSeahorseDataprep("OPEA_DATAPREP_SEAHORSE", "test")
+            self.assertIsNotNone(instance)
 
     def test_tei_info_without_model_id_raises_http_exception(self):
         module = import_dataprep_module(

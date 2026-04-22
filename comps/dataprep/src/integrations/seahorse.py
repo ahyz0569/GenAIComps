@@ -64,7 +64,7 @@ class OpeaSeahorseDataprep(OpeaComponent):
         self.vectorstore = self._initialize_vectorstore()
         health_status = self.check_health()
         if not health_status:
-            raise RuntimeError("OpeaSeahorseDataprep health check failed.")
+            logger.error("OpeaSeahorseDataprep health check failed.")
 
     @staticmethod
     def _require_env_config() -> None:

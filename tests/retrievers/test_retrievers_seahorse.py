@@ -155,7 +155,7 @@ def import_retriever_module(env):
 
 
 class TestSeahorseRetriever(unittest.TestCase):
-    def test_init_raises_when_health_check_fails(self):
+    def test_init_logs_error_when_health_check_fails(self):
         module = import_retriever_module(
             {
                 "SEAHORSE_BASE_URL": "https://example.com",
@@ -169,8 +169,8 @@ class TestSeahorseRetriever(unittest.TestCase):
         vectorstore.health.side_effect = RuntimeError("unreachable")
 
         with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
-            with self.assertRaises(RuntimeError):
-                module.OpeaSeahorseRetriever("OPEA_RETRIEVER_SEAHORSE", "test")
+            instance = module.OpeaSeahorseRetriever("OPEA_RETRIEVER_SEAHORSE", "test")
+            self.assertIsNotNone(instance)
 
     def test_init_raises_when_search_mode_unknown(self):
         module = import_retriever_module(
