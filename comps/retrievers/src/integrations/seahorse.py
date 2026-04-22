@@ -179,16 +179,13 @@ class OpeaSeahorseRetriever(OpeaComponent):
         return SeahorseVectorStore(**kwargs)
 
     def check_health(self) -> bool:
-        """Check Seahorse Cloud connectivity via indexed-row-count API."""
+        """Check Seahorse Cloud connectivity via the SDK's public health() API."""
         if logflag:
             logger.info("[ check health ] start to check health of Seahorse Cloud")
         try:
-            result = self.vectorstore._client.get_indexed_row_count()
+            self.vectorstore.health()
             if logflag:
-                logger.info(
-                    f"[ check health ] Seahorse Cloud connected. "
-                    f"total_row_count={result.get('total_row_count', 'N/A')}"
-                )
+                logger.info("[ check health ] Seahorse Cloud connected.")
             return True
         except Exception as e:
             logger.error(f"[ check health ] Failed to connect to Seahorse Cloud: {e}")

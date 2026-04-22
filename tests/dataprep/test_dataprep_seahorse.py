@@ -58,7 +58,9 @@ class FakeVectorStore:
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
-        self._client = SimpleNamespace(get_indexed_row_count=lambda: {"total_row_count": 1})
+
+    def health(self):
+        return None
 
     def add_texts(self, *args, **kwargs):
         return None
@@ -193,7 +195,7 @@ class TestSeahorseDataprep(unittest.TestCase):
         )
 
         vectorstore = MagicMock()
-        vectorstore._client.get_indexed_row_count.return_value = {"total_row_count": 1}
+        vectorstore.health.return_value = None
 
         with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
             with self.assertRaises(RuntimeError):
@@ -209,7 +211,7 @@ class TestSeahorseDataprep(unittest.TestCase):
         )
 
         vectorstore = MagicMock()
-        vectorstore._client.get_indexed_row_count.side_effect = RuntimeError("unreachable")
+        vectorstore.health.side_effect = RuntimeError("unreachable")
 
         with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
             with self.assertRaises(RuntimeError):

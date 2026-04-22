@@ -65,7 +65,9 @@ class FakeVectorStore:
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
-        self._client = SimpleNamespace(get_indexed_row_count=lambda: {"total_row_count": 1})
+
+    def health(self):
+        return None
 
 
 class FakeTextSplitter:
@@ -164,7 +166,7 @@ class TestSeahorseRetriever(unittest.TestCase):
         )
 
         vectorstore = MagicMock()
-        vectorstore._client.get_indexed_row_count.side_effect = RuntimeError("unreachable")
+        vectorstore.health.side_effect = RuntimeError("unreachable")
 
         with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
             with self.assertRaises(RuntimeError):
@@ -181,7 +183,7 @@ class TestSeahorseRetriever(unittest.TestCase):
         )
 
         vectorstore = MagicMock()
-        vectorstore._client.get_indexed_row_count.return_value = {"total_row_count": 1}
+        vectorstore.health.return_value = None
 
         with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
             with self.assertRaises(RuntimeError) as ctx:
@@ -199,7 +201,7 @@ class TestSeahorseRetriever(unittest.TestCase):
         )
 
         vectorstore = MagicMock()
-        vectorstore._client.get_indexed_row_count.return_value = {"total_row_count": 1}
+        vectorstore.health.return_value = None
         vectorstore.similarity_search.return_value = ["unexpected"]
 
         with patch.object(module, "SeahorseVectorStore", return_value=vectorstore):
@@ -225,7 +227,7 @@ class TestSeahorseRetriever(unittest.TestCase):
         doc_a = object()
         doc_b = object()
         vectorstore = MagicMock()
-        vectorstore._client.get_indexed_row_count.return_value = {"total_row_count": 2}
+        vectorstore.health.return_value = None
         vectorstore.similarity_search_with_score.return_value = [(doc_a, 0.15), (doc_b, 0.35)]
         vectorstore.similarity_search.return_value = [doc_b]
 
@@ -263,7 +265,7 @@ class TestSeahorseRetriever(unittest.TestCase):
         response.json.return_value = {"model_id": "bge-small"}
 
         vectorstore = MagicMock()
-        vectorstore._client.get_indexed_row_count.return_value = {"total_row_count": 1}
+        vectorstore.health.return_value = None
 
         with (
             patch.object(module, "requests") as mock_requests,
