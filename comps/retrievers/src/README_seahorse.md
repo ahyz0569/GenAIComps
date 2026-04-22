@@ -38,6 +38,8 @@ export SEAHORSE_SEARCH_MODE="hybrid"      # "dense", "sparse", or "hybrid"
 > When `SEAHORSE_EMBEDDING_MODE="external"`, Retriever search is always dense-only.
 > Set `SEAHORSE_SEARCH_MODE="dense"`; `hybrid` and `sparse` will be overridden to `dense`.
 
+> Both `SEAHORSE_EMBEDDING_MODE` and `SEAHORSE_SEARCH_MODE` are normalized to lowercase and trimmed at startup, so values like `Builtin`, `HYBRID`, or `dense` are accepted. An unknown `SEAHORSE_SEARCH_MODE` raises `RuntimeError` at boot listing the supported values.
+
 For `external` mode, you can also set:
 
 ```bash
@@ -114,10 +116,18 @@ curl http://${your_ip}:7000/v1/retrieval \
 
 ## 4. Embedding Modes
 
-| Mode | Env Var | Search Method | TEI Required? |
-|---|---|---|---|
-| `builtin` | `SEAHORSE_EMBEDDING_MODE=builtin` | `similarity_search(query=text)` — server embeds query | No |
+| Mode       | Env Var                            | Search Method                                                                                                                                                                   | TEI Required?                        |
+| ---------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `builtin`  | `SEAHORSE_EMBEDDING_MODE=builtin`  | `similarity_search(query=text)` — server embeds query                                                                                                                           | No                                   |
 | `external` | `SEAHORSE_EMBEDDING_MODE=external` | `similarity_search_by_vector(embedding=vec)` — dense-only query vector search. External embeddings apply to dense vectors only; sparse always uses the built-in embedding path. | No (falls back to local HuggingFace) |
 
-> Seahorse Cloud does not support MMR search. MMR requests fall back to similarity search.
-> For dense searches, prefer `search_type="similarity_distance_threshold"` when applying a distance cutoff.
+## 5. Search Type Behavior
+
+| `search_type`                   | Dense (`builtin` + `SEAHORSE_SEARCH_MODE=dense`, or `external`)                                                                        | Sparse / Hybrid (`builtin` only)                                                                                                            |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `similarity`                    | Top-`k` by cosine distance — no threshold applied                                                                                      | Top-`k` by similarity score — no threshold applied                                                                                          |
+| `similarity_score_threshold`    | `score_threshold` is interpreted as a **distance upper bound** (lower = closer match). Returns docs with `distance ≤ score_threshold`. | `score_threshold` is interpreted as a **similarity lower bound** (higher = better match). Returns docs with `similarity ≥ score_threshold`. |
+| `similarity_distance_threshold` | `distance_threshold` is the **distance upper bound**. Recommended for dense distance cutoffs.                                          | Not supported — returns HTTP 400.                                                                                                           |
+| `mmr`                           | **Not supported.** Silently falls back to `similarity` (a warning is logged). For diversity-aware retrieval, use a different backend.  | Same as dense.                                                                                                                              |
+
+> **Important:** `score_threshold` semantics differ between dense and sparse/hybrid because the underlying SDK returns distances for dense vector search and similarities for sparse/hybrid. Apply the threshold accordingly when comparing results across modes. When in doubt for dense searches, prefer `similarity_distance_threshold` so the intent is unambiguous.

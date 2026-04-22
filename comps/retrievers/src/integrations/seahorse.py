@@ -111,7 +111,10 @@ class OpeaSeahorseRetriever(OpeaComponent):
         if search_type not in SUPPORTED_SEARCH_TYPES:
             raise HTTPException(status_code=400, detail=f"Unsupported search_type: {search_type}")
         if search_type == "mmr":
-            logger.info("[ invoke ] MMR not supported by Seahorse, falling back to similarity search")
+            logger.warning(
+                "[ invoke ] MMR is not supported by Seahorse Cloud; falling back to similarity search. "
+                "Diversity-aware retrieval will not be applied."
+            )
             return "similarity"
         return search_type
 

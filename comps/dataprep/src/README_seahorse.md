@@ -100,9 +100,11 @@ curl -X POST \
 
 ## Embedding Modes
 
-| Mode | Env Var | Behavior | TEI Required? |
-|---|---|---|---|
-| `builtin` | `SEAHORSE_EMBEDDING_MODE=builtin` | Seahorse server generates embeddings server-side | No |
+| Mode       | Env Var                            | Behavior                                            | TEI Required?                        |
+| ---------- | ---------------------------------- | --------------------------------------------------- | ------------------------------------ |
+| `builtin`  | `SEAHORSE_EMBEDDING_MODE=builtin`  | Seahorse server generates embeddings server-side    | No                                   |
 | `external` | `SEAHORSE_EMBEDDING_MODE=external` | TEI or local HuggingFace model generates embeddings | No (falls back to local HuggingFace) |
+
+> `SEAHORSE_EMBEDDING_MODE` is normalized to lowercase and trimmed at startup, so values like `Builtin`, `EXTERNAL`, or `builtin` are all accepted. Any other value falls back to the `external` code path.
 
 > Once documents are ingested with a specific mode, do **not** switch modes without deleting all existing data first.
