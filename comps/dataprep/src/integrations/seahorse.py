@@ -42,7 +42,7 @@ HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN", "")
 # Seahorse Cloud configuration
 SEAHORSE_BASE_URL = os.getenv("SEAHORSE_BASE_URL", "")
 SEAHORSE_API_KEY = os.getenv("SEAHORSE_API_KEY", "")
-SEAHORSE_EMBEDDING_MODE = os.getenv("SEAHORSE_EMBEDDING_MODE", "builtin")
+SEAHORSE_EMBEDDING_MODE = os.getenv("SEAHORSE_EMBEDDING_MODE", "builtin").strip().lower()
 
 
 @OpeaComponentRegistry.register("OPEA_DATAPREP_SEAHORSE")

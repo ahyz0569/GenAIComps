@@ -259,5 +259,5 @@ MARIADB_COLLECTION_NAME = os.getenv("MARIADB_COLLECTION_NAME", "rag_mariadbvecto
 #######################################################
 SEAHORSE_BASE_URL = os.getenv("SEAHORSE_BASE_URL", "")
 SEAHORSE_API_KEY = os.getenv("SEAHORSE_API_KEY", "")
-SEAHORSE_SEARCH_MODE = os.getenv("SEAHORSE_SEARCH_MODE", "hybrid")
-SEAHORSE_EMBEDDING_MODE = os.getenv("SEAHORSE_EMBEDDING_MODE", "builtin")
+SEAHORSE_SEARCH_MODE = os.getenv("SEAHORSE_SEARCH_MODE", "hybrid").strip().lower()
+SEAHORSE_EMBEDDING_MODE = os.getenv("SEAHORSE_EMBEDDING_MODE", "builtin").strip().lower()
